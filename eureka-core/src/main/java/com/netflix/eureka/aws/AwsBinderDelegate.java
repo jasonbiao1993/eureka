@@ -10,6 +10,9 @@ import javax.annotation.PreDestroy;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
+/**
+ * Aws 绑定委托
+ */
 @Singleton
 public class AwsBinderDelegate implements AwsBinder {
 

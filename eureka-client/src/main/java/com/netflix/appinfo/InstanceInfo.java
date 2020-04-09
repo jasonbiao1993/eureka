@@ -315,12 +315,12 @@ public class InstanceInfo {
 
 
     public enum InstanceStatus {
-        UP, // Ready to receive traffic
-        DOWN, // Do not send traffic- healthcheck callback failed
-        STARTING, // Just about starting- initializations to be done - do not
+        UP, // Ready to receive traffic 在线
+        DOWN, // Do not send traffic- healthcheck callback failed 下线
+        STARTING, // Just about starting- initializations to be done - do not 正在启动
         // send traffic
-        OUT_OF_SERVICE, // Intentionally shutdown for traffic
-        UNKNOWN;
+        OUT_OF_SERVICE, // Intentionally shutdown for traffic 失效
+        UNKNOWN; // 未知
 
         public static InstanceStatus toEnum(String s) {
             if (s != null) {

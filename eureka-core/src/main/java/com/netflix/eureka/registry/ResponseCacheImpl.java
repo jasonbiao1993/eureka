@@ -69,6 +69,8 @@ import org.slf4j.LoggerFactory;
  *
  * The cache also maintains separate pay load for <em>JSON</em> and <em>XML</em>
  * formats and for multiple versions too.
+ *
+ * 持有readWriteCacheMap和readOnlyCacheMap成员变量
  * </p>
  *
  * @author Karthik Ranganathan, Greg Kim
@@ -112,8 +114,11 @@ public class ResponseCacheImpl implements ResponseCache {
                 }
             });
 
+    // 周期更新，类ResponseCacheImpl成员变量，默认每30s从readWriteCacheMap更新，
+    // Eureka client默认从这里更新服务注册信息，可配置直接从readWriteCacheMap更新
     private final ConcurrentMap<Key, Value> readOnlyCacheMap = new ConcurrentHashMap<Key, Value>();
 
+    // 实时更新，类ResponseCacheImpl成员变量，缓存时间180秒
     private final LoadingCache<Key, Value> readWriteCacheMap;
     private final boolean shouldUseReadOnlyResponseCache;
     private final AbstractInstanceRegistry registry;
@@ -129,6 +134,7 @@ public class ResponseCacheImpl implements ResponseCache {
         long responseCacheUpdateIntervalMs = serverConfig.getResponseCacheUpdateIntervalMs();
         this.readWriteCacheMap =
                 CacheBuilder.newBuilder().initialCapacity(serverConfig.getInitialCapacityOfResponseCache())
+                        // 自动过期时间, 默认180秒
                         .expireAfterWrite(serverConfig.getResponseCacheAutoExpirationInSeconds(), TimeUnit.SECONDS)
                         .removalListener(new RemovalListener<Key, Value>() {
                             @Override
@@ -153,9 +159,11 @@ public class ResponseCacheImpl implements ResponseCache {
                         });
 
         if (shouldUseReadOnlyResponseCache) {
+            // 定时任务触发时间间隔
             timer.schedule(getCacheUpdateTask(),
                     new Date(((System.currentTimeMillis() / responseCacheUpdateIntervalMs) * responseCacheUpdateIntervalMs)
                             + responseCacheUpdateIntervalMs),
+                    // 间隔
                     responseCacheUpdateIntervalMs);
         }
 
@@ -166,6 +174,10 @@ public class ResponseCacheImpl implements ResponseCache {
         }
     }
 
+    /**
+     * 用于从readWriteCacheMap更新缓存到readOnlyCacheMap
+     * @return
+     */
     private TimerTask getCacheUpdateTask() {
         return new TimerTask() {
             @Override

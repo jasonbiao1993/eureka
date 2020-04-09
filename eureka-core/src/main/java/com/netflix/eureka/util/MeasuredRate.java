@@ -47,13 +47,16 @@ public class MeasuredRate {
     }
 
     public synchronized void start() {
+        // 是否活跃
         if (!isActive) {
+            // 60s 一次
             timer.schedule(new TimerTask() {
 
                 @Override
                 public void run() {
                     try {
                         // Zero out the current bucket.
+                        // 每隔60s设置成0一次
                         lastBucket.set(currentBucket.getAndSet(0));
                     } catch (Throwable e) {
                         logger.error("Cannot reset the Measured Rate", e);

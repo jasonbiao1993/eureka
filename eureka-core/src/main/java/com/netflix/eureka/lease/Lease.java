@@ -150,6 +150,7 @@ public class Lease<T> {
 
     /**
      * Returns the holder of the lease.
+     * 返回实例持有者
      */
     public T getHolder() {
         return holder;

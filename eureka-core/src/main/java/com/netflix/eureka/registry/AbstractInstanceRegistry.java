@@ -68,6 +68,10 @@ import static com.netflix.eureka.util.EurekaMonitors.*;
  * Primary operations that are performed are the
  * <em>Registers</em>, <em>Renewals</em>, <em>Cancels</em>, <em>Expirations</em>, and <em>Status Changes</em>. The
  * registry also stores only the delta operations
+ *
+ * 保存服务注册信息，持有registry和responseCache成员变量
+ *
+ * 服务注册信息通过三层缓存实现
  * </p>
  *
  * @author Karthik Ranganathan
@@ -77,6 +81,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     private static final Logger logger = LoggerFactory.getLogger(AbstractInstanceRegistry.class);
 
     private static final String[] EMPTY_STR_ARRAY = new String[0];
+    // 实时更新，类AbstractInstanceRegistry成员变量，UI端请求的是这里的服务注册信息
     private final ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>> registry
             = new ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>>();
     protected Map<String, RemoteRegionRegistry> regionNameVSRemoteRegistry = new HashMap<String, RemoteRegionRegistry>();
@@ -293,6 +298,8 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      * {@link #cancel(String, String, boolean)} method is overridden by {@link PeerAwareInstanceRegistry}, so each
      * cancel request is replicated to the peers. This is however not desired for expires which would be counted
      * in the remote peers as valid cancellations, so self preservation mode would not kick-in.
+     *
+     * 内部下线
      */
     protected boolean internalCancel(String appName, String id, boolean isReplication) {
         try {
@@ -317,13 +324,17 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 InstanceInfo instanceInfo = leaseToCancel.getHolder();
                 String vip = null;
                 String svip = null;
+                // 删除实例信息
                 if (instanceInfo != null) {
                     instanceInfo.setActionType(ActionType.DELETED);
                     recentlyChangedQueue.add(new RecentlyChangedItem(leaseToCancel));
+                    // 设置最近更新的时间戳
                     instanceInfo.setLastUpdatedTimestamp();
                     vip = instanceInfo.getVIPAddress();
                     svip = instanceInfo.getSecureVipAddress();
                 }
+
+                // 清除二级缓存
                 invalidateCache(appName, vip, svip);
                 logger.info("Cancelled instance {}/{} (replication={})", appName, id, isReplication);
             }
@@ -345,7 +356,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     /**
      * Marks the given instance of the given app name as renewed, and also marks whether it originated from
      * replication.
-     *
+     * 续约
      * @see com.netflix.eureka.lease.LeaseManager#renew(java.lang.String, java.lang.String, boolean)
      */
     public boolean renew(String appName, String id, boolean isReplication) {
@@ -382,6 +393,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 }
             }
             renewsLastMin.increment();
+            // 更新更新时间
             leaseToRenew.renew();
             return true;
         }
@@ -575,6 +587,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
 
     /**
      * Evicts everything in the instance registry that has expired, if expiry is enabled.
+     * 如果启用了驱逐，则将实例注册表中已到期的所有内容逐出。
      *
      * @see com.netflix.eureka.lease.LeaseManager#evict()
      */
@@ -594,6 +607,9 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         // We collect first all expired items, to evict them in random order. For large eviction sets,
         // if we do not that, we might wipe out whole apps before self preservation kicks in. By randomizing it,
         // the impact should be evenly distributed across all applications.
+        // 我们首先收集所有过期的物品，以随机顺序将其逐出。对于大型驱逐集，
+        // 如果不这样做，则可能会在自我保护开始之前先清除整个应用程序。通过将其随机化，
+        // 影响应均匀地分布在所有应用程序中。
         List<Lease<InstanceInfo>> expiredLeases = new ArrayList<>();
         for (Entry<String, Map<String, Lease<InstanceInfo>>> groupEntry : registry.entrySet()) {
             Map<String, Lease<InstanceInfo>> leaseMap = groupEntry.getValue();
@@ -601,6 +617,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 for (Entry<String, Lease<InstanceInfo>> leaseEntry : leaseMap.entrySet()) {
                     Lease<InstanceInfo> lease = leaseEntry.getValue();
                     if (lease.isExpired(additionalLeaseMs) && lease.getHolder() != null) {
+                        // 过期的列表
                         expiredLeases.add(lease);
                     }
                 }
@@ -609,6 +626,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
 
         // To compensate for GC pauses or drifting local time, we need to use current registry size as a base for
         // triggering self-preservation. Without that we would wipe out full registry.
+        // 为了补偿GC暂停或本地时间漂移，我们需要使用当前注册表大小作为触发自我保存的措施。否则，我们将清除完整的注册表。
         int registrySize = (int) getLocalRegistrySize();
         int registrySizeThreshold = (int) (registrySize * serverConfig.getRenewalPercentThreshold());
         int evictionLimit = registrySize - registrySizeThreshold;
@@ -626,8 +644,10 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
 
                 String appName = lease.getHolder().getAppName();
                 String id = lease.getHolder().getId();
+                // 过期数量
                 EXPIRED.increment();
                 logger.warn("DS: Registry: expired lease for {}/{}", appName, id);
+                // 撤销租赁实例
                 internalCancel(appName, id, false);
             }
         }
@@ -1182,10 +1202,12 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
 
     private void invalidateCache(String appName, @Nullable String vipAddress, @Nullable String secureVipAddress) {
         // invalidate cache
+        // 使缓存无效
         responseCache.invalidate(appName, vipAddress, secureVipAddress);
     }
 
     protected void updateRenewsPerMinThreshold() {
+        // 计算每分钟最小续约数
         this.numberOfRenewsPerMinThreshold = (int) (this.expectedNumberOfClientsSendingRenews
                 * (60.0 / serverConfig.getExpectedClientRenewalIntervalSeconds())
                 * serverConfig.getRenewalPercentThreshold());
@@ -1212,10 +1234,12 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     protected void postInit() {
         renewsLastMin.start();
         if (evictionTaskRef.get() != null) {
+            // 启动是将驱逐任务撤销
             evictionTaskRef.get().cancel();
         }
         evictionTaskRef.set(new EvictionTask());
         evictionTimer.schedule(evictionTaskRef.get(),
+                // 清理未续约节点(evict)周期，默认60s
                 serverConfig.getEvictionIntervalTimerInMs(),
                 serverConfig.getEvictionIntervalTimerInMs());
     }
@@ -1236,6 +1260,9 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         return overriddenInstanceStatusMap.size();
     }
 
+    /**
+     * 驱逐任务
+     */
     /* visible for testing */ class EvictionTask extends TimerTask {
 
         private final AtomicLong lastExecutionNanosRef = new AtomicLong(0l);
@@ -1243,6 +1270,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         @Override
         public void run() {
             try {
+                // 补偿时间
                 long compensationTimeMs = getCompensationTimeMs();
                 logger.info("Running the evict task with compensationTime {}ms", compensationTimeMs);
                 evict(compensationTimeMs);
@@ -1265,6 +1293,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             }
 
             long elapsedMs = TimeUnit.NANOSECONDS.toMillis(currNanos - lastNanos);
+            // 与配置的时间比较，防止由于gc或者时钟漂移导致的问题
             long compensationTime = elapsedMs - serverConfig.getEvictionIntervalTimerInMs();
             return compensationTime <= 0l ? 0l : compensationTime;
         }

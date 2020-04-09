@@ -190,6 +190,8 @@ public class PeerEurekaNode {
      * @param overriddenStatus
      *            the overridden status information if any of the instance.
      * @throws Throwable
+     *
+     * 通过心跳eureka信息
      */
     public void heartbeat(final String appName, final String id,
                           final InstanceInfo info, final InstanceStatus overriddenStatus,

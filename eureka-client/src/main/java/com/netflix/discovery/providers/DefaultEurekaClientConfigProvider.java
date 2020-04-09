@@ -14,12 +14,19 @@ import com.netflix.discovery.EurekaNamespace;
  */
 public class DefaultEurekaClientConfigProvider implements Provider<EurekaClientConfig> {
 
+    /**
+     * EurekaNamespace 用于扩展处理
+     */
     @Inject(optional = true)
     @EurekaNamespace
     private String namespace;
 
     private DefaultEurekaClientConfig config;
-    
+
+    /**
+     * 用于 {@link com.google.inject.ProvidedBy} 获取值
+     * @return
+     */
     @Override
     public synchronized EurekaClientConfig get() {
         if (config == null) {

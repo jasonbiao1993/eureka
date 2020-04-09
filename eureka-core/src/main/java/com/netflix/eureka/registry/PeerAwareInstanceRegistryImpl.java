@@ -234,9 +234,16 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
         return count;
     }
 
+    /**
+     * 这个方法主要是设置了期望每分钟接收到的心跳次数，并将服务实例的状态设置为UP，最后又通过方法postInit来开启一个定时任务
+     * 用于每隔一段时间（默认60秒）将没有续约的服务实例（默认90秒没有续约）清理掉。openForTraffic的方法代码如下：
+     * @param applicationInfoManager
+     * @param count
+     */
     @Override
     public void openForTraffic(ApplicationInfoManager applicationInfoManager, int count) {
         // Renewals happen every 30 seconds and for a minute it should be a factor of 2.
+        // 续订每30秒一次，一分钟2次
         this.expectedNumberOfClientsSendingRenews = count;
         updateRenewsPerMinThreshold();
         logger.info("Got {} instances from neighboring DS node", count);
@@ -252,7 +259,9 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
             primeAwsReplicas(applicationInfoManager);
         }
         logger.info("Changing status to UP");
+        // 修改服务实例的状态为UP
         applicationInfoManager.setInstanceStatus(InstanceStatus.UP);
+        // 开启定时任务，每隔一段时间（默认60秒）将没有续约的服务实例（默认90秒没有续约）清理掉
         super.postInit();
     }
 
@@ -368,7 +377,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
 
     /*
      * (non-Javadoc)
-     *
+     * 服务下线
      * @see com.netflix.eureka.registry.InstanceRegistry#cancel(java.lang.String,
      * java.lang.String, long, boolean)
      */
@@ -376,6 +385,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
     public boolean cancel(final String appName, final String id,
                           final boolean isReplication) {
         if (super.cancel(appName, id, isReplication)) {
+            // 同步复制
             replicateToPeers(Action.Cancel, appName, id, null, null, isReplication);
 
             return true;
@@ -412,6 +422,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
      */
     public boolean renew(final String appName, final String id, final boolean isReplication) {
         if (super.renew(appName, id, isReplication)) {
+            // 同步复制
             replicateToPeers(Action.Heartbeat, appName, id, null, null, isReplication);
             return true;
         }
