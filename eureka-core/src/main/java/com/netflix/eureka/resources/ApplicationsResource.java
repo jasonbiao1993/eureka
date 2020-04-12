@@ -50,6 +50,8 @@ import com.netflix.eureka.util.EurekaMonitors;
  *
  * @author Karthik Ranganathan, Greg Kim
  *
+ * 用于接收客户端的请求
+ *
  */
 @Path("/{version}/apps")
 @Produces({"application/xml", "application/json"})
